@@ -1,0 +1,20 @@
+# Local testing only - Kubernetes deployment uses the Helm chart (Step 3)
+services:
+  users-service:
+    build: ./apps/users-service
+    ports: ["3001:3001"]
+
+  orders-service:
+    build: ./apps/orders-service
+    environment:
+      USERS_URL: http://users-service:3001
+    ports: ["3002:3002"]
+    depends_on: [users-service]
+
+  frontend:
+    build: ./apps/frontend
+    environment:
+      USERS_URL: http://users-service:3001
+      ORDERS_URL: http://orders-service:3002
+    ports: ["3000:3000"]
+    depends_on: [users-service, orders-service]
