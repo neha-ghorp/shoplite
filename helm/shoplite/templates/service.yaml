@@ -1,0 +1,23 @@
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.enabled }}
+{{- $ctx := dict "root" $ "name" $name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "shoplite.labels" $ctx | nindent 4 }}
+spec:
+  type: {{ $svc.service.type | default "ClusterIP" }}
+  selector:
+    {{- include "shoplite.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: http
+      {{- if and (eq ($svc.service.type | default "ClusterIP") "NodePort") $svc.service.nodePort }}
+      nodePort: {{ $svc.service.nodePort }}
+      {{- end }}
+{{- end }}
+{{- end }}

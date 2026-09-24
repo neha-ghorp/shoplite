@@ -1,0 +1,28 @@
+# Apply once after ArgoCD is up:  kubectl apply -f argocd/shoplite-dev.yaml
+# From then on ArgoCD keeps namespace shoplite-dev in sync with the `test` branch.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shoplite-dev
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/neha-ghorp/shoplite.git
+    # main is protected, so the pipeline commits image-tag bumps to test
+    targetRevision: test
+    path: helm/shoplite
+    helm:
+      valueFiles:
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: shoplite-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

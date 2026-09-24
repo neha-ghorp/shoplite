@@ -1,0 +1,47 @@
+# Defaults shared by every environment. Override per env in values-<env>.yaml.
+
+image:
+  # Final image = <repository>/<service-name>:<tag>
+  repository: ghcr.io/neha-ghorp/shoplite
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# One entry per microservice. The key is used as the Deployment/Service name,
+# so other services reach it at http://<key>:<port> inside the namespace.
+services:
+  users-service:
+    enabled: true
+    replicas: 1
+    port: 3001
+    service:
+      type: ClusterIP
+    env: {}
+
+  orders-service:
+    enabled: true
+    replicas: 1
+    port: 3002
+    service:
+      type: ClusterIP
+    env:
+      USERS_URL: http://users-service:3001
+
+  frontend:
+    enabled: true
+    replicas: 1
+    port: 3000
+    service:
+      type: ClusterIP
+    env:
+      USERS_URL: http://users-service:3001
+      ORDERS_URL: http://orders-service:3002
