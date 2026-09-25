@@ -4,6 +4,14 @@
 image:
   tag: sha-fa01a64
 services:
+  orders-service:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 20Mi
+      limits:
+        cpu: 200m
+        memory: 20Mi
   frontend:
     service:
       # Exposed on the kind node; the kind module maps host 8080 -> node 30080
