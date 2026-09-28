@@ -4,10 +4,6 @@
 image:
   tag: sha-fa01a64
 services:
-  orders-service:
-    env:
-      USERS_URL: http://users-service:3001
-      NODE_OPTIONS: --require /app/tracing.js
   frontend:
     service:
       # Exposed on the kind node; the kind module maps host 8080 -> node 30080
