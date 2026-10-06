@@ -26,33 +26,7 @@ a CI pipeline that tests on a real cluster before it ships, and Git as the only 
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    dev([Developer]) -->|push / run workflow| gha
-
-    subgraph gha[GitHub Actions]
-        direction LR
-        v[validate<br/>helm lint + template] --> b[build<br/>multi-arch images]
-        b --> e[e2e<br/>throwaway kind cluster]
-        e --> p[promote<br/>bump image tag]
-    end
-
-    b -->|push sha-tag| ghcr[(ghcr.io)]
-    p -->|commit values-dev.yaml| git[(Git: test branch)]
-
-    subgraph k8s[kind cluster - provisioned by Terraform/Terragrunt]
-        argo[ArgoCD] -->|helm render + apply| ns
-        subgraph ns[namespace: shoplite-dev]
-            fe[frontend :3000] --> os[orders-service :3002]
-            fe --> us[users-service :3001]
-            os --> us
-        end
-    end
-
-    git -->|watched| argo
-    ghcr -->|pull| ns
-    user([Browser]) -->|localhost:8080 → NodePort 30080| fe
-```
+![ShopLite architecture](docs/architecture.png)
 
 **Request flow:** `frontend` → `orders-service` → `users-service`. The frontend proxies API calls server-side,
 so internal services are never exposed outside the cluster. Services find each other through Kubernetes DNS
@@ -82,6 +56,7 @@ terragrunt/dev/            dev environment wiring the modules (root.hcl holds sh
 argocd/shoplite-dev.yaml   ArgoCD Application: tracks helm/shoplite on the test branch
 .github/workflows/         CI/CD pipeline
 scripts/e2e-test.sh        end-to-end smoke test (used in CI and locally)
+docs/                      architecture diagram (PNG + editable HTML source)
 ```
 
 ## Design decisions
@@ -157,8 +132,8 @@ cd terragrunt/dev && terragrunt run --all destroy
 
 This cluster is also used to practice breaking and fixing things the GitOps way. For example, a bad
 `NODE_OPTIONS` value was committed to cause a CrashLoopBackOff, debugged with `describe` and `logs --previous`
-(exit code 1, `Cannot find module`), and fixed by reverting in Git. A direct `kubectl set env` fix was undone by
-ArgoCD `selfHeal`. The rolling update kept the old pod serving, so the bad deploy caused no downtime.
+(exit code 1, `Cannot find module`), and fixed in Git, because with ArgoCD `selfHeal` a direct `kubectl` fix
+would be reverted. The rolling update kept the old pod serving, so the bad deploy caused no downtime.
 See the `lab:` and `fix(dev):` commits in the history.
 
 ## Roadmap
