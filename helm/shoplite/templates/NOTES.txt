@@ -1,0 +1,8 @@
+ShopLite deployed to namespace {{ .Release.Namespace }} with image tag {{ .Values.image.tag }}.
+
+  kubectl -n {{ .Release.Namespace }} get pods
+{{- if eq (.Values.services.frontend.service.type | default "ClusterIP") "NodePort" }}
+  Frontend: http://localhost:8080 (kind maps host 8080 -> nodePort {{ .Values.services.frontend.service.nodePort }})
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/frontend 8080:3000
+{{- end }}
