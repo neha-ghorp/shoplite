@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ShopLite Architecture</title>
+<style>
+  :root {
+    --bg: #F6F7F9; --card: #FFFFFF; --ink: #111827; --muted: #5B6472; --line: #D9DEE5;
+    --ci: #2563EB; --reg: #7C3AED; --git: #E8590C; --argo: #EF7B4D; --k8s: #326CE5; --app: #0F9D74; --user: #475569;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 1600px; height: 950px; background: var(--bg); font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; color: var(--ink); position: relative; overflow: hidden; }
+  .abs { position: absolute; }
+
+  .title { left: 40px; top: 34px; }
+  .title h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.5px; }
+  .title p { font-size: 17px; color: var(--muted); margin-top: 6px; }
+  .repo { right: 40px; top: 50px; font-size: 15px; color: var(--muted); background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; font-weight: 500; }
+
+  .zone { border: 1.5px dashed #C3CAD4; border-radius: 16px; background: rgba(255,255,255,0.45); }
+  .zone-label { font-size: 13px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 14px 20px; box-shadow: 0 1px 2px rgba(16,24,40,0.05), 0 2px 8px rgba(16,24,40,0.04); overflow: hidden; }
+  .card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--accent); }
+  .card h3 { font-size: 17px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+  .card .num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; align-items: center; justify-content: center; }
+  .card p { font-size: 13.5px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .card code { font-family: "SF Mono", Menlo, monospace; font-size: 12.5px; color: #374151; background: #F1F3F6; padding: 1px 5px; border-radius: 4px; }
+
+  .chip { font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 5px 12px; border: 1px solid; background: #fff; }
+
+  svg { position: absolute; left: 0; top: 0; pointer-events: none; }
+  .lbl { font-size: 12.5px; font-weight: 600; fill: #374151; }
+
+  .footer { left: 40px; right: 40px; top: 885px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .footer .tech { font-size: 13px; font-weight: 600; color: #374151; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; }
+  .footer .sep { color: var(--muted); font-size: 13px; margin: 0 4px; }
+</style>
+</head>
+<body>
+
+<div class="abs title">
+  <h1>ShopLite</h1>
+  <p>GitOps CI/CD platform on Kubernetes: build, test on a real cluster, deploy by Git commit</p>
+</div>
+<div class="abs repo">github.com/neha-ghorp/shoplite</div>
+
+<!-- CI zone -->
+<div class="abs zone" style="left:300px; top:140px; width:1260px; height:200px;"></div>
+<div class="abs zone-label" style="left:330px; top:156px; color:var(--ci);">CI/CD pipeline · GitHub Actions</div>
+
+<div class="abs card" style="--accent:var(--user); left:40px; top:200px; width:210px; height:110px;">
+  <h3>Developer</h3>
+  <p>Pushes code, runs the workflow on the <code>test</code> branch</p>
+</div>
+
+<div class="abs card" style="--accent:var(--ci); left:330px; top:192px; width:270px; height:128px;">
+  <h3><span class="num">1</span>Validate</h3>
+  <p><code>helm lint</code> + <code>helm template</code><br>Tag = <code>sha-&lt;commit&gt;</code></p>
+</div>
+<div class="abs card" style="--accent:var(--ci); left:640px; top:192px; width:270px; height:128px;">
+  <h3><span class="num">2</span>Build</h3>
+  <p>Docker Buildx, multi-arch<br><code>amd64</code> + <code>arm64</code> · 3 services in parallel</p>
+</div>
+<div class="abs card" style="--accent:var(--ci); left:950px; top:192px; width:270px; height:128px;">
+  <h3><span class="num">3</span>E2E test</h3>
+  <p>Throwaway kind cluster<br><code>helm install</code> + smoke tests</p>
+</div>
+<div class="abs card" style="--accent:var(--ci); left:1260px; top:192px; width:270px; height:128px;">
+  <h3><span class="num">4</span>Promote</h3>
+  <p><code>yq</code> writes new image tag<br>into <code>values-dev.yaml</code></p>
+</div>
+
+<!-- middle row -->
+<div class="abs card" style="--accent:var(--user); left:230px; top:410px; width:220px; height:92px;">
+  <h3>User</h3>
+  <p>Browser → <code>localhost:8080</code></p>
+</div>
+<div class="abs card" style="--accent:var(--reg); left:640px; top:410px; width:270px; height:92px;">
+  <h3>GitHub Container Registry</h3>
+  <p><code>ghcr.io</code> · immutable SHA tags</p>
+</div>
+<div class="abs card" style="--accent:var(--git); left:1260px; top:410px; width:270px; height:92px;">
+  <h3>Git · test branch</h3>
+  <p>Helm chart + values · source of truth</p>
+</div>
+
+<!-- cluster zone -->
+<div class="abs zone" style="left:40px; top:570px; width:1520px; height:280px; border-color:#9DB5E8; background:rgba(50,108,229,0.04);"></div>
+<div class="abs zone-label" style="left:66px; top:584px; color:var(--k8s);">Kubernetes cluster (kind)</div>
+<div class="abs chip" style="left:900px; top:579px; color:#6D28D9; border-color:#D9C8FB;">Provisioned with Terraform + Terragrunt</div>
+
+<div class="abs" style="left:70px; top:618px; width:1020px; height:214px; border:1px solid #CFE0F7; border-radius:12px; background:#fff;"></div>
+<div class="abs" style="left:90px; top:632px; font-size:13px; font-weight:600; color:var(--muted);">namespace: <span style="font-family:'SF Mono',Menlo,monospace; color:var(--ink);">shoplite-dev</span></div>
+<div class="abs chip" style="left:620px; top:627px; color:#047857; border-color:#BFE6D7;">non-root · read-only FS · caps dropped · probes · limits</div>
+
+<div class="abs card" style="--accent:var(--app); left:100px; top:670px; width:250px; height:110px;">
+  <h3>frontend</h3>
+  <p><code>:3000</code> · NodePort 30080<br>server-side API proxy</p>
+</div>
+<div class="abs card" style="--accent:var(--app); left:455px; top:670px; width:250px; height:110px;">
+  <h3>orders-service</h3>
+  <p><code>:3002</code> · ClusterIP<br>enriches orders with users</p>
+</div>
+<div class="abs card" style="--accent:var(--app); left:810px; top:670px; width:250px; height:110px;">
+  <h3>users-service</h3>
+  <p><code>:3001</code> · ClusterIP<br>user data</p>
+</div>
+
+<div class="abs card" style="--accent:var(--argo); left:1200px; top:640px; width:330px; height:170px;">
+  <h3>Argo CD</h3>
+  <p>Watches Git, renders the Helm chart and applies it</p>
+  <p style="margin-top:10px;"><code>auto-sync</code> <code>prune</code> <code>self-heal</code></p>
+  <p style="margin-top:8px;">Manual changes are reverted to Git</p>
+</div>
+
+<svg width="1600" height="950" viewBox="0 0 1600 950">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4B5563"/>
+    </marker>
+  </defs>
+  <g stroke="#4B5563" stroke-width="2" fill="none" marker-end="url(#a)">
+    <!-- dev -> pipeline, stage to stage -->
+    <line x1="252" y1="255" x2="326" y2="255"/>
+    <line x1="602" y1="255" x2="636" y2="255"/>
+    <line x1="912" y1="255" x2="946" y2="255"/>
+    <line x1="1222" y1="255" x2="1256" y2="255"/>
+    <!-- build -> registry, promote -> git -->
+    <line x1="775" y1="322" x2="775" y2="406"/>
+    <line x1="1395" y1="322" x2="1395" y2="406"/>
+    <!-- git -> argo, registry -> namespace, user -> frontend -->
+    <line x1="1395" y1="504" x2="1395" y2="636"/>
+    <line x1="775" y1="504" x2="775" y2="614"/>
+    <line x1="330" y1="504" x2="330" y2="666"/>
+    <!-- argo -> namespace -->
+    <line x1="1198" y1="725" x2="1094" y2="725"/>
+    <!-- service calls -->
+    <line x1="352" y1="725" x2="451" y2="725"/>
+    <line x1="707" y1="725" x2="806" y2="725"/>
+    <path d="M225,782 C225,818 935,818 935,784"/>
+  </g>
+  <g class="lbl">
+    <text x="787" y="368">push images</text>
+    <text x="1407" y="368">commit new tag</text>
+    <text x="1407" y="550">watch &amp; sync</text>
+    <text x="787" y="550">pull images</text>
+    <text x="342" y="550">HTTP · NodePort 30080</text>
+    <text x="1120" y="714">apply</text>
+  </g>
+</svg>
+
+<div class="abs footer">
+  <span class="tech">Kubernetes</span><span class="tech">Helm</span><span class="tech">Argo CD</span>
+  <span class="tech">Terraform</span><span class="tech">Terragrunt</span><span class="tech">GitHub Actions</span>
+  <span class="tech">Docker Buildx</span><span class="tech">GHCR</span><span class="tech">kind</span>
+</div>
+
+</body>
+</html>
