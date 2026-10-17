@@ -1,0 +1,14 @@
+# Traefik dynamic config: which certificate to serve and which TLS versions to allow.
+# Cert and key are Swarm secrets, mounted as files under /run/secrets.
+tls:
+  certificates:
+    - certFile: /run/secrets/shoplite_crt
+      keyFile: /run/secrets/shoplite_key
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /run/secrets/shoplite_crt
+        keyFile: /run/secrets/shoplite_key
+  options:
+    default:
+      minVersion: VersionTLS12
