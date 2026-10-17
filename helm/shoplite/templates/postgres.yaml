@@ -1,7 +1,8 @@
 {{- $pg := .Values.postgres }}
-{{- if eq $pg.mode "external" }}
-# Migration phase 1: the database still runs outside the cluster (on Swarm).
-# Apps connect to "postgres" either way, so moving the DB later needs no app change.
+{{- /* The app-facing Service is always "postgres"; only its target changes between modes. */}}
+{{- if has $pg.mode (list "external" "migrating") }}
+# DB still outside the cluster (on Swarm). Apps connect to "postgres" in every mode,
+# so moving the DB later needs no app change.
 apiVersion: v1
 kind: Service
 metadata:
@@ -9,12 +10,29 @@ metadata:
 spec:
   type: ExternalName
   externalName: {{ $pg.external.host }}
-{{- else if eq $pg.mode "internal" }}
+{{- end }}
+{{- if eq $pg.mode "internal" }}
+---
 apiVersion: v1
 kind: Service
 metadata:
   name: postgres
 spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+{{- end }}
+{{- if has $pg.mode (list "migrating" "internal") }}
+---
+# Headless governing Service of the StatefulSet. Fixed name: serviceName is immutable.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-db
+spec:
+  clusterIP: None
   selector:
     app.kubernetes.io/name: postgres
   ports:
@@ -27,7 +45,7 @@ kind: StatefulSet
 metadata:
   name: postgres
 spec:
-  serviceName: postgres
+  serviceName: postgres-db
   replicas: 1
   selector:
     matchLabels:
@@ -37,8 +55,9 @@ spec:
       labels:
         app.kubernetes.io/name: postgres
     spec:
+      automountServiceAccountToken: false   # no API token; keeps /run/secrets free (see deployment.yaml)
       securityContext:
-        runAsUser: 70        # "postgres" user in the alpine image
+        runAsUser: 70       # "postgres" user in the alpine image
         runAsGroup: 70
         fsGroup: 70          # make the volume writable for that user
       containers:

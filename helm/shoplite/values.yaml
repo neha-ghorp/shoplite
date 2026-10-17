@@ -54,6 +54,7 @@ services:
 # Postgres for users-service:
 #   mode: none      - no database (in-memory users, the default)
 #   mode: external  - Service "postgres" points to a database outside the cluster
+#   mode: migrating - like external, plus an (empty) StatefulSet to restore a dump into
 #   mode: internal  - Postgres StatefulSet with a PVC inside the cluster
 postgres:
   mode: none
