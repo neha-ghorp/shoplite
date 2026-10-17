@@ -1,0 +1,27 @@
+# Same as: docker service create --name registry --publish 5050:5000 --mount ... registry:2
+# but declarative: Ansible only changes something if the service differs from this.
+- name: Run private image registry
+  community.docker.docker_swarm_service:
+    name: registry
+    image: registry:2
+    publish:
+      - published_port: "{{ registry_port }}"
+        target_port: 5000
+    mounts:
+      - source: registry-data
+        target: /var/lib/registry
+        type: volume
+    restart_config:
+      condition: any
+
+- name: Wait until the registry answers
+  ansible.builtin.uri:
+    url: "http://localhost:{{ registry_port }}/v2/_catalog"
+  register: catalog
+  retries: 10
+  delay: 3
+  until: catalog.status == 200
+
+- name: Images in the registry
+  ansible.builtin.debug:
+    msg: "{{ catalog.json.repositories }}"

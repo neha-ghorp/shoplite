@@ -1,0 +1,16 @@
+# Make this node a Swarm manager. "present" = only init if it isn't one already.
+- name: Initialise Swarm
+  community.docker.docker_swarm:
+    state: present
+
+# On a multi-node cluster you would add here:
+#   - read the join tokens from the first manager (docker_swarm_info)
+#   - run docker_swarm with state: join on the other managers and workers
+- name: Show Swarm node status
+  community.docker.docker_swarm_info:
+    nodes: true
+  register: swarm_info
+
+- name: Nodes in the cluster
+  ansible.builtin.debug:
+    msg: "{{ swarm_info.nodes | map(attribute='Hostname') | list }}"

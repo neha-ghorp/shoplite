@@ -7,8 +7,13 @@ mkdir -p certs && cd certs
 
 # 1. Root CA: a key and a self-signed certificate. This is the trust anchor.
 openssl genrsa -out ca.key 4096
+# Strict clients (Python 3.13+, Java) require a CA to declare that it may sign certificates.
 openssl req -x509 -new -key ca.key -sha256 -days 365 \
-  -subj "/O=ShopLite Lab/CN=ShopLite Root CA" -out ca.crt
+  -subj "/O=ShopLite Lab/CN=ShopLite Root CA" \
+  -addext "basicConstraints=critical,CA:TRUE" \
+  -addext "keyUsage=critical,keyCertSign,cRLSign" \
+  -addext "subjectKeyIdentifier=hash" \
+  -out ca.crt
 
 # 2. Server key + certificate signing request (CSR): "please sign this public key for this name"
 openssl genrsa -out shoplite.key 2048
@@ -20,6 +25,7 @@ basicConstraints=CA:FALSE
 keyUsage=digitalSignature,keyEncipherment
 extendedKeyUsage=serverAuth
 subjectAltName=DNS:shoplite.localhost,DNS:*.shoplite.localhost
+authorityKeyIdentifier=keyid,issuer
 EOF
 openssl x509 -req -in shoplite.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
   -days 90 -sha256 -extfile shoplite.ext -out shoplite.crt

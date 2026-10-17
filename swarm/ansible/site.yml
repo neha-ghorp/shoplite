@@ -1,0 +1,15 @@
+# Rebuilds the whole ShopLite Swarm platform from scratch. Safe to re-run (idempotent).
+# Run: cd swarm/ansible && ansible-playbook site.yml
+- name: ShopLite Swarm platform
+  hosts: managers
+  gather_facts: false
+
+  # Every community.docker module talks to this Docker engine
+  module_defaults:
+    group/community.docker.docker:
+      docker_host: "{{ docker_host }}"
+
+  roles:
+    - { role: swarm, tags: [swarm] }
+    - { role: registry, tags: [registry] }
+    - { role: shoplite, tags: [shoplite] }

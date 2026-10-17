@@ -1,0 +1,9 @@
+# Docker Desktop's socket; on a Linux server this is unix:///var/run/docker.sock
+docker_host: "unix://{{ lookup('env', 'HOME') }}/.docker/run/docker.sock"
+
+registry_port: 5050
+stack_name: shoplite
+swarm_dir: "{{ playbook_dir }}/.."     # swarm/ folder with docker-stack.yml
+
+# Secret values come from the encrypted vault.yml, never from this file
+db_password: "{{ vault_db_password }}"

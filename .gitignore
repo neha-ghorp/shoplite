@@ -9,3 +9,4 @@ node_modules/
 *.kubeconfig
 .state/
 swarm/certs/
+swarm/ansible/.vault-pass

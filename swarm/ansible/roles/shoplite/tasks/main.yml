@@ -1,0 +1,43 @@
+# TLS certificates: only generate them if they don't exist yet ("creates" makes it idempotent)
+- name: Generate CA and server certificate
+  ansible.builtin.command:
+    cmd: "{{ swarm_dir }}/make-certs.sh"
+    creates: "{{ swarm_dir }}/certs/shoplite.crt"
+
+# The password comes from the encrypted vault. no_log keeps it out of Ansible's output.
+- name: Create database password secret
+  community.docker.docker_secret:
+    name: db_password
+    data: "{{ db_password }}"
+    state: present
+  no_log: true
+
+# Content hash of the cert: a new cert means a new secret name, so a rolling update of Traefik
+- name: Fingerprint the server certificate
+  ansible.builtin.stat:
+    path: "{{ swarm_dir }}/certs/shoplite.crt"
+    checksum_algorithm: sha256
+  register: cert
+
+- name: Deploy ShopLite stack
+  community.docker.docker_stack:
+    name: "{{ stack_name }}"
+    compose:
+      - "{{ swarm_dir }}/docker-stack.yml"
+    state: present
+  environment:
+    DOCKER_HOST: "{{ docker_host }}"   # docker_stack uses the docker CLI, not the Python SDK
+    CERT_VERSION: "{{ cert.stat.checksum[:12] }}"
+
+- name: Wait until the app answers over HTTPS
+  ansible.builtin.uri:
+    url: https://shoplite.localhost/api/users
+    ca_path: "{{ swarm_dir }}/certs/ca.crt"
+  register: app
+  retries: 20
+  delay: 5
+  until: app.status == 200
+
+- name: Smoke test result
+  ansible.builtin.debug:
+    msg: "{{ app.json | map(attribute='name') | list }}"
