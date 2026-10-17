@@ -1,0 +1,36 @@
+# ShopLite migrated from Docker Swarm (swarm/docker-stack.yml) into namespace "shop".
+# helm upgrade --install shop helm/shoplite -n shop -f helm/shoplite/values-migration.yaml
+
+image:
+  repository: localhost:5050/shoplite   # same registry and image names as Swarm
+
+# Phase 1: the database stays on Swarm. Phase 3 switches this to "internal".
+postgres:
+  mode: external
+  external:
+    host: host.docker.internal          # the Swarm node publishing 5432 (host mode)
+
+services:
+  users-service:
+    replicas: 2
+    tag: 1.1.0
+    probes:
+      readiness: /ready                 # Swarm HEALTHCHECK used /ready; K8s splits the two
+      liveness: /health
+    secretMounts: [db-password]         # -> /run/secrets/db_password, same path as Swarm
+    env:
+      DB_HOST: postgres                 # same name as on Swarm; a Service resolves it here
+      DB_PASSWORD_FILE: /run/secrets/db_password
+
+  orders-service:
+    replicas: 2
+    tag: 1.0.0
+
+  frontend:
+    replicas: 2
+    tag: 1.1.0
+    service:
+      type: NodePort
+      nodePort: 30090                   # reached by the edge proxy through an L4 forwarder
+    env:
+      PLATFORM: kubernetes

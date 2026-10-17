@@ -1,0 +1,25 @@
+# Swarm -> Kubernetes cutover. Traefik watches this file: change the weights and it
+# applies them live, no restart. Change them with ./cutover.sh <swarm%> <k8s%>
+http:
+  routers:
+    shop:
+      rule: Host(`shoplite.localhost`)
+      entryPoints: [websecure]
+      tls: {}
+      service: shop-cutover
+  services:
+    shop-cutover:
+      weighted:
+        services:
+          - name: frontend@swarm # defined by the labels on the Swarm frontend service
+            weight: 0
+          - name: frontend-k8s
+            weight: 100
+    frontend-k8s:
+      loadBalancer:
+        servers:
+          - url: http://host.docker.internal:8090 # L4 forwarder -> K8s NodePort 30090
+        healthCheck: # an unhealthy K8s backend gets no traffic
+          path: /health
+          interval: 5s
+          timeout: 2s

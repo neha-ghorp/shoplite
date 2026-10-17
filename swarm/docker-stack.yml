@@ -46,8 +46,9 @@ services:
 
   frontend:
     <<: *defaults
-    image: localhost:5050/shoplite/frontend:1.0.0
+    image: localhost:5050/shoplite/frontend:1.1.0
     environment:
+      PLATFORM: swarm
       USERS_URL: http://users-service:3001
       ORDERS_URL: http://orders-service:3002
     # No published port any more: Traefik is the only way in
@@ -55,9 +56,8 @@ services:
       <<: *deploy
       labels:                 # Traefik reads these from the Swarm API to build its routes
         traefik.enable: "true"
-        traefik.http.routers.frontend.rule: Host(`shoplite.localhost`)
-        traefik.http.routers.frontend.entrypoints: websecure
-        traefik.http.routers.frontend.tls: "true"
+        # Only the backend is defined here; the router lives in traefik/cutover.yml
+        # so traffic can be split between this service and Kubernetes.
         traefik.http.services.frontend.loadbalancer.server.port: "3000"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
@@ -72,7 +72,8 @@ services:
       - --providers.swarm.endpoint=unix:///var/run/docker.sock
       - --providers.swarm.exposedByDefault=false        # only route services with traefik.enable=true
       - --providers.swarm.network=shoplite_shoplite-net
-      - --providers.file.filename=/etc/traefik/tls.yml
+      - --providers.file.directory=/etc/traefik/dynamic   # tls.yml + cutover.yml
+      - --providers.file.watch=true                       # apply edits live
       - --entrypoints.web.address=:80
       - --entrypoints.web.http.redirections.entrypoint.to=websecure   # http -> https
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
@@ -85,10 +86,10 @@ services:
     volumes:
       # Read-only, but still powerful: access to the Docker API is effectively root on the node
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # A bind mount (not a Swarm config) because weights must change without a restart.
+      # Single-node lab only: on a cluster this folder must exist on every manager.
+      - ./traefik:/etc/traefik/dynamic:ro
     secrets: [shoplite_crt, shoplite_key]
-    configs:
-      - source: traefik_tls
-        target: /etc/traefik/tls.yml
     deploy:
       replicas: 1
       placement:
@@ -112,6 +113,12 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+    ports:
+      # Phase 1 of the migration: Kubernetes services use this Swarm database.
+      # Host mode = only on the DB node. In production: firewall it to the K8s node IPs only.
+      - target: 5432
+        published: 5432
+        mode: host
     deploy:
       replicas: 1             # a single writer: two Postgres on one data dir would corrupt it
       placement:
@@ -143,5 +150,3 @@ secrets:
 configs:
   init_sql:
     file: ./init.sql          # read from disk at deploy time and stored in the Swarm
-  traefik_tls:
-    file: ./traefik-tls.yml

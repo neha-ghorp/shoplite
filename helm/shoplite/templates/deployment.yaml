@@ -22,13 +22,18 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      # Apps don't call the Kubernetes API, so no API token in the pod (least privilege).
+      # It also keeps /run/secrets free for Swarm-style secret files: the token would be
+      # mounted at /var/run/secrets/kubernetes.io (/var/run -> /run) and collide.
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         # The Dockerfiles use the non-numeric "node" user; k8s needs the UID to verify non-root
         runAsUser: 1000
       containers:
         - name: {{ $name }}
-          image: "{{ $.Values.image.repository }}/{{ $name }}:{{ $.Values.image.tag }}"
+          # Per-service tag wins over the global one (services migrate at different versions)
+          image: "{{ $.Values.image.repository }}/{{ $name }}:{{ $svc.tag | default $.Values.image.tag }}"
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           ports:
             - name: http
@@ -42,16 +47,24 @@ spec:
             {{- end }}
           readinessProbe:
             httpGet:
-              path: /health
+              path: {{ dig "probes" "readiness" "/health" $svc }}
               port: http
             initialDelaySeconds: 3
             periodSeconds: 5
           livenessProbe:
             httpGet:
-              path: /health
+              # Liveness never checks dependencies, or a DB outage restarts every pod
+              path: {{ dig "probes" "liveness" "/health" $svc }}
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
+          {{- with $svc.secretMounts }}
+          volumeMounts:
+            # Same path as Swarm secrets, so apps need no change: /run/secrets/<key>
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+          {{- end }}
           resources:
             {{- toYaml ($svc.resources | default $.Values.resources) | nindent 12 }}
           securityContext:
@@ -59,5 +72,15 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+      {{- with $svc.secretMounts }}
+      volumes:
+        - name: secrets
+          projected:
+            sources:
+              {{- range . }}
+              - secret:
+                  name: {{ . }}
+              {{- end }}
+      {{- end }}
 {{- end }}
 {{- end }}

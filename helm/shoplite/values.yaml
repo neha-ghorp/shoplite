@@ -45,3 +45,21 @@ services:
     env:
       USERS_URL: http://users-service:3001
       ORDERS_URL: http://orders-service:3002
+
+# Per service (optional):
+#   tag: 1.2.3                       overrides image.tag
+#   probes: { readiness: /ready, liveness: /health }
+#   secretMounts: [db-password]      Secrets mounted as files under /run/secrets
+
+# Postgres for users-service:
+#   mode: none      - no database (in-memory users, the default)
+#   mode: external  - Service "postgres" points to a database outside the cluster
+#   mode: internal  - Postgres StatefulSet with a PVC inside the cluster
+postgres:
+  mode: none
+  external:
+    host: db.example.internal
+  internal:
+    image: postgres:16-alpine
+    storage: 1Gi
+    passwordSecret: db-password      # Secret with key db_password

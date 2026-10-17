@@ -1,0 +1,89 @@
+{{- $pg := .Values.postgres }}
+{{- if eq $pg.mode "external" }}
+# Migration phase 1: the database still runs outside the cluster (on Swarm).
+# Apps connect to "postgres" either way, so moving the DB later needs no app change.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  type: ExternalName
+  externalName: {{ $pg.external.host }}
+{{- else if eq $pg.mode "internal" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+---
+# StatefulSet, not Deployment: stable identity and one PVC per pod that survives restarts
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+    spec:
+      securityContext:
+        runAsUser: 70        # "postgres" user in the alpine image
+        runAsGroup: 70
+        fsGroup: 70          # make the volume writable for that user
+      containers:
+        - name: postgres
+          image: {{ $pg.internal.image }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: shoplite
+            - name: POSTGRES_USER
+              value: shoplite
+            - name: POSTGRES_PASSWORD_FILE
+              value: /run/secrets/db_password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata   # subdirectory: the volume root isn't empty
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "shoplite", "-d", "shoplite"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "shoplite", "-d", "shoplite"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 256Mi }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+      volumes:
+        - name: secrets
+          secret:
+            secretName: {{ $pg.internal.passwordSecret }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ $pg.internal.storage }}
+{{- end }}

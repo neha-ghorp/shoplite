@@ -4,6 +4,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const USERS_URL = process.env.USERS_URL || 'http://localhost:3001';
 const ORDERS_URL = process.env.ORDERS_URL || 'http://localhost:3002';
+const PLATFORM = process.env.PLATFORM || 'unknown';
+
+// Tells us which platform served a request during the Swarm -> Kubernetes cutover
+app.use((req, res, next) => {
+  res.set('X-Platform', PLATFORM);
+  next();
+});
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
