@@ -4,9 +4,9 @@
 image:
   repository: localhost:5050/shoplite   # same registry and image names as Swarm
 
-# Phase 1: the database stays on Swarm. Phase 3 switches this to "internal".
+# Phase 1 was "external" (DB on Swarm), migrate-db.sh used "migrating" then "internal".
 postgres:
-  mode: external
+  mode: internal
   external:
     host: host.docker.internal          # the Swarm node publishing 5432 (host mode)
 
