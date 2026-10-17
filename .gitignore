@@ -10,3 +10,4 @@ node_modules/
 .state/
 swarm/certs/
 swarm/ansible/.vault-pass
+jenkins/.secrets/

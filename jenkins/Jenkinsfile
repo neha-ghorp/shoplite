@@ -1,0 +1,105 @@
+// Build, push and deploy one ShopLite service to the Kubernetes namespace "shop".
+pipeline {
+  agent any
+
+  parameters {
+    choice(name: 'SERVICE', choices: ['users-service', 'orders-service', 'frontend'], description: 'Service to release')
+    string(name: 'VERSION', defaultValue: '1.1.1', description: 'Semantic version, e.g. 1.1.1')
+  }
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()          // two deploys at once would fight over the Helm release
+    timeout(time: 15, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  environment {
+    REGISTRY     = 'localhost:5050/shoplite'          // pushed by the host's Docker engine
+    REGISTRY_API = 'http://host.docker.internal:5050' // same registry, seen from this container
+    NAMESPACE    = 'shop'
+    CHART        = 'helm/shoplite'
+    VALUES       = 'helm/shoplite/values-migration.yaml'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        script {
+          // Immutable tag: version + commit, so every image points to exactly one commit
+          env.TAG = "${params.VERSION}-${sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()}"
+          currentBuild.displayName = "#${env.BUILD_NUMBER} ${params.SERVICE}:${env.TAG}"
+        }
+      }
+    }
+
+    stage('Guard: tag must be new') {
+      steps {
+        sh '''
+          if curl -fs "$REGISTRY_API/v2/shoplite/$SERVICE/tags/list" | jq -e --arg t "$TAG" '.tags // [] | index($t)' >/dev/null; then
+            echo "Tag $SERVICE:$TAG already exists - refusing to overwrite an immutable tag"; exit 1
+          fi
+        '''
+      }
+    }
+
+    stage('Build') {
+      steps {
+        sh 'docker build -t "$REGISTRY/$SERVICE:$TAG" "apps/$SERVICE"'
+      }
+    }
+
+    stage('Push') {
+      steps {
+        sh 'docker push "$REGISTRY/$SERVICE:$TAG"'
+      }
+    }
+
+    stage('Lint chart') {
+      steps {
+        sh 'helm lint "$CHART" -f "$VALUES"'
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        withCredentials([file(credentialsId: 'kubeconfig-shop', variable: 'KUBECONFIG')]) {
+          // --atomic: if the new pods don't become ready, Helm rolls back automatically
+          sh '''
+            helm upgrade shop "$CHART" -n "$NAMESPACE" -f "$VALUES" \
+              --set "services.$SERVICE.tag=$TAG" \
+              --atomic --wait --timeout 3m
+          '''
+        }
+      }
+    }
+
+    stage('Smoke test') {
+      steps {
+        withCredentials([file(credentialsId: 'kubeconfig-shop', variable: 'KUBECONFIG')]) {
+          sh '''
+            RUNNING=$(kubectl -n "$NAMESPACE" get deploy "$SERVICE" -o jsonpath='{.spec.template.spec.containers[0].image}')
+            echo "running image: $RUNNING"
+            [ "$RUNNING" = "$REGISTRY/$SERVICE:$TAG" ]
+            # Full request path inside the cluster: frontend -> orders -> users -> postgres
+            kubectl -n "$NAMESPACE" exec deploy/frontend -- wget -qO- http://localhost:3000/api/orders
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "Released ${params.SERVICE}:${env.TAG} to ${env.NAMESPACE}"
+    }
+    failure {
+      // Evidence for whoever is on call, captured before anyone starts poking around
+      withCredentials([file(credentialsId: 'kubeconfig-shop', variable: 'KUBECONFIG')]) {
+        sh 'kubectl -n "$NAMESPACE" get pods -o wide || true'
+        sh 'kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp | tail -20 || true'
+      }
+    }
+  }
+}

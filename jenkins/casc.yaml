@@ -1,0 +1,42 @@
+# Jenkins Configuration as Code: users, credentials and jobs, all from Git.
+jenkins:
+  systemMessage: "ShopLite CI/CD - configured by casc.yaml, do not change settings in the UI"
+  numExecutors: 2
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          password: "${JENKINS_ADMIN_PASSWORD}"     # from the environment, never in Git
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          # Kubeconfig as a "secret file" credential: only pipelines that ask for it get it
+          - file:
+              scope: GLOBAL
+              id: kubeconfig-shop
+              description: kind cluster, namespace shop
+              fileName: kubeconfig
+              secretBytes: "${readFileBase64:/run/secrets/kubeconfig}"
+
+jobs:
+  - script: |
+      pipelineJob('shoplite-deploy') {
+        description('Build, push and deploy one ShopLite service to Kubernetes')
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote { url('file:///repo') }
+                branch('*/swarm-migration')
+              }
+            }
+            scriptPath('jenkins/Jenkinsfile')
+          }
+        }
+      }
