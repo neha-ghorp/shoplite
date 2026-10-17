@@ -1,0 +1,101 @@
+# ShopLite on Docker Swarm - the "legacy" platform we migrate away from.
+# Deploy: docker stack deploy -c swarm/docker-stack.yml shoplite
+
+# Shared defaults, reused by every service with "<<: *defaults" (plain YAML anchors)
+x-defaults: &defaults
+  networks: [shoplite-net]
+  deploy:
+    replicas: 2
+    update_config:
+      parallelism: 1          # replace one container at a time
+      order: start-first      # start the new one before stopping the old one
+      failure_action: rollback
+      monitor: 15s            # watch the new container this long before continuing
+    rollback_config:
+      parallelism: 1
+    restart_policy:
+      condition: on-failure
+    resources:
+      reservations: { cpus: "0.05", memory: 64M }   # K8s: requests
+      limits: { cpus: "0.5", memory: 128M }         # K8s: limits
+
+services:
+  users-service:
+    <<: *defaults
+    image: localhost:5050/shoplite/users-service:1.1.0
+    environment:
+      DB_HOST: postgres
+      DB_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/ready"]   # Swarm has one check, so use readiness
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  orders-service:
+    <<: *defaults
+    image: localhost:5050/shoplite/orders-service:1.0.0
+    environment:
+      USERS_URL: http://users-service:3001   # service name = DNS name on the overlay network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  frontend:
+    <<: *defaults
+    image: localhost:5050/shoplite/frontend:1.0.0
+    environment:
+      USERS_URL: http://users-service:3001
+      ORDERS_URL: http://orders-service:3002
+    ports:
+      - "3000:3000"           # published on the routing mesh: every node answers on 3000
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    networks: [shoplite-net]
+    environment:
+      POSTGRES_DB: shoplite
+      POSTGRES_USER: shoplite
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password   # read password from the secret file
+    secrets: [db_password]
+    configs:
+      - source: init_sql
+        target: /docker-entrypoint-initdb.d/init.sql     # Postgres runs this on first start
+    volumes:
+      - pgdata:/var/lib/postgresql/data                  # data outlives the container
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "shoplite", "-d", "shoplite"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      replicas: 1             # a single writer: two Postgres on one data dir would corrupt it
+      placement:
+        constraints: [node.role == manager]   # local volume lives on ONE node - pin it there
+      update_config:
+        order: stop-first     # never run old and new at the same time on the same volume
+      resources:
+        limits: { cpus: "1", memory: 256M }
+
+networks:
+  shoplite-net:
+    driver: overlay           # spans all Swarm nodes; only this stack's services join it
+
+volumes:
+  pgdata:                     # "local" driver: stored on the node's disk, not shared between nodes
+
+secrets:
+  db_password:
+    external: true            # created outside the stack (docker secret create / Ansible)
+
+configs:
+  init_sql:
+    file: ./init.sql          # read from disk at deploy time and stored in the Swarm
