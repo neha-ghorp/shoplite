@@ -27,6 +27,10 @@ pipeline {
       steps {
         checkout scm
         script {
+          // Parameters defined in a Jenkinsfile only exist after its first run
+          if (!params.SERVICE || !(params.VERSION ==~ /\d+\.\d+\.\d+/)) {
+            error("Missing or invalid parameters (first run registers them) - use 'Build with Parameters'")
+          }
           // Immutable tag: version + commit, so every image points to exactly one commit
           env.TAG = "${params.VERSION}-${sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()}"
           currentBuild.displayName = "#${env.BUILD_NUMBER} ${params.SERVICE}:${env.TAG}"
