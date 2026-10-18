@@ -1,0 +1,21 @@
+{{- /* Tells the Prometheus Operator to scrape /metrics of every service with metrics: true */}}
+{{- range $name, $svc := .Values.services }}
+{{- if and $svc.enabled $svc.metrics }}
+{{- $ctx := dict "root" $ "name" $name }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "shoplite.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "shoplite.selectorLabels" $ctx | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+{{- end }}
+{{- end }}

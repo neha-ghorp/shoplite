@@ -1,9 +1,29 @@
 const fs = require('fs');
 const express = require('express');
 const { Pool } = require('pg');
+const client = require('prom-client');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Prometheus metrics (RED: rate, errors, duration) + Node.js process metrics
+client.collectDefaultMetrics();
+const httpDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'HTTP request duration in seconds',
+  labelNames: ['method', 'route', 'status'],
+  buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+});
+app.use((req, res, next) => {
+  const end = httpDuration.startTimer();
+  // route pattern (/users/:id), not the raw URL, so label values stay few (low cardinality)
+  res.on('finish', () => end({ method: req.method, route: req.route?.path || 'unmatched', status: res.statusCode }));
+  next();
+});
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
+});
 
 // Fallback data when no database is configured (local dev, existing Helm chart)
 const users = [

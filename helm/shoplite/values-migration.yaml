@@ -18,6 +18,7 @@ services:
       readiness: /ready                 # Swarm HEALTHCHECK used /ready; K8s splits the two
       liveness: /health
     secretMounts: [db-password]         # -> /run/secrets/db_password, same path as Swarm
+    metrics: true                       # ServiceMonitor: Prometheus scrapes /metrics
     env:
       DB_HOST: postgres                 # same name as on Swarm; a Service resolves it here
       DB_PASSWORD_FILE: /run/secrets/db_password

@@ -50,6 +50,7 @@ services:
 #   tag: 1.2.3                       overrides image.tag
 #   probes: { readiness: /ready, liveness: /health }
 #   secretMounts: [db-password]      Secrets mounted as files under /run/secrets
+#   metrics: true                    create a ServiceMonitor for /metrics (needs Prometheus Operator)
 
 # Postgres for users-service:
 #   mode: none      - no database (in-memory users, the default)
