@@ -78,11 +78,15 @@ services:
       - --entrypoints.web.http.redirections.entrypoint.to=websecure   # http -> https
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
       - --entrypoints.websecure.address=:443
-      - --metrics.prometheus=true                       # scraped in Block 5
+      - --entrypoints.metrics.address=:8082
+      - --metrics.prometheus=true
+      - --metrics.prometheus.entryPoint=metrics         # /metrics on its own port, not on 80/443
+      - --metrics.prometheus.addServicesLabels=true     # per backend: frontend@swarm vs frontend-k8s
       - --ping=true
     ports:
       - "80:80"
       - "443:443"
+      - "8082:8082"           # scraped by Prometheus in Kubernetes; firewall it in production
     volumes:
       # Read-only, but still powerful: access to the Docker API is effectively root on the node
       - /var/run/docker.sock:/var/run/docker.sock:ro

@@ -1,0 +1,43 @@
+# kube-prometheus-stack for the kind lab.
+# helm upgrade --install monitoring prometheus-community/kube-prometheus-stack -n monitoring -f monitoring/values.yaml
+
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 30909
+  prometheusSpec:
+    scrapeInterval: 15s
+    retention: 2d
+    resources:
+      requests: { cpu: 100m, memory: 400Mi }
+    # Pick up ServiceMonitors / PrometheusRules from every namespace,
+    # not only those labelled for this Helm release
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    # During the migration we also watch the Swarm side: Traefik's metrics endpoint
+    additionalScrapeConfigs:
+      - job_name: swarm-traefik
+        static_configs:
+          - targets: ["host.docker.internal:8082"]
+            labels: { platform: swarm-edge }
+
+alertmanager:
+  service:
+    type: NodePort
+    nodePort: 30903
+
+grafana:
+  service:
+    type: NodePort
+    nodePort: 30300
+  sidecar:
+    dashboards:
+      searchNamespace: ALL      # dashboards are ConfigMaps labelled grafana_dashboard=1, in any namespace
+
+# kind runs these control-plane components bound to 127.0.0.1, so Prometheus can't scrape
+# them and would raise permanent false alerts. On a real cluster you keep them on.
+kubeEtcd: { enabled: false }
+kubeControllerManager: { enabled: false }
+kubeScheduler: { enabled: false }
+kubeProxy: { enabled: false }
