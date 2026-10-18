@@ -1,0 +1,64 @@
+# ShopLite alert rules. The Prometheus Operator loads every PrometheusRule in the cluster.
+# Lab values: short "for" durations so alerts fire within a few minutes during the demo.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: shoplite
+  namespace: monitoring
+spec:
+  groups:
+    - name: shoplite.edge
+      rules:
+        # Symptom users feel: errors at the front door, on either platform
+        - alert: ShopLiteHighErrorRate
+          expr: |
+            100 * sum(rate(traefik_service_requests_total{code=~"5.."}[2m]))
+              / clamp_min(sum(rate(traefik_service_requests_total[2m])), 0.001) > 5
+          for: 1m                  # production: ~5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $value | printf \"%.1f\" }}% of requests fail at the edge"
+            description: More than 5% of requests return 5xx. During a cutover, shift traffic back first, investigate second.
+            runbook: "1) Dashboard 'ShopLite migration': which platform? 2) If K8s: ./swarm/cutover.sh 100 0 3) kubectl -n shop get pods,events"
+
+        - alert: TLSCertificateExpiringSoon
+          expr: min by (cn) ((traefik_tls_certs_not_after - time()) / 86400) < 14
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate {{ $labels.cn }} expires in {{ $value | printf \"%.0f\" }} days"
+            description: An expired certificate is a full outage for every client.
+            runbook: "Renew: rerun make-certs.sh + ansible-playbook (Swarm) or check cert-manager Certificate status (K8s)"
+
+    - name: shoplite.app
+      rules:
+        - alert: ShopLiteDeploymentDegraded
+          expr: kube_deployment_status_replicas_available{namespace="shop"} < kube_deployment_spec_replicas{namespace="shop"}
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.deployment }}: only {{ $value }} replicas available"
+            description: Pods are not ready. Readiness failures usually mean a dependency (e.g. the database) is down.
+            runbook: "kubectl -n shop describe deploy {{ $labels.deployment }}; kubectl -n shop logs deploy/{{ $labels.deployment }}"
+
+        - alert: ShopLiteSlowRequests
+          expr: |
+            histogram_quantile(0.95, sum by (le, route)
+              (rate(http_request_duration_seconds_bucket{namespace="shop", route!="/metrics"}[5m]))) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "users-service {{ $labels.route }} p95 latency is {{ $value | printf \"%.2f\" }}s"
+
+        # Monitoring the monitoring: a silent target looks exactly like "everything is fine"
+        - alert: ShopLiteScrapeTargetDown
+          expr: up{job=~"swarm-traefik|users-service"} == 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Prometheus cannot scrape {{ $labels.job }} ({{ $labels.instance }})"
