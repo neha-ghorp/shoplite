@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ShopLite Swarm to Kubernetes Migration</title>
+<style>
+  :root {
+    --bg: #F6F7F9; --card: #FFFFFF; --ink: #111827; --muted: #5B6472; --line: #D9DEE5;
+    --ci: #2563EB; --reg: #7C3AED; --git: #E8590C; --argo: #EF7B4D; --k8s: #326CE5; --app: #0F9D74; --user: #475569; --swarm: #0DB7ED; --edge: #24A1C1; --mon: #E6522C; --jen: #D24939; --ans: #1A1918; --db: #336791;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 1600px; height: 1000px; background: var(--bg); font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; color: var(--ink); position: relative; overflow: hidden; }
+  .abs { position: absolute; }
+
+  .title { left: 40px; top: 34px; }
+  .title h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.5px; }
+  .title p { font-size: 17px; color: var(--muted); margin-top: 6px; }
+  .repo { right: 40px; top: 50px; font-size: 15px; color: var(--muted); background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; font-weight: 500; }
+
+  .zone { border: 1.5px dashed #C3CAD4; border-radius: 16px; background: rgba(255,255,255,0.45); }
+  .zone-label { font-size: 13px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 14px 20px; box-shadow: 0 1px 2px rgba(16,24,40,0.05), 0 2px 8px rgba(16,24,40,0.04); overflow: hidden; }
+  .card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--accent); }
+  .card h3 { font-size: 17px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+  .card .num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; align-items: center; justify-content: center; }
+  .card p { font-size: 13.5px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .card code { font-family: "SF Mono", Menlo, monospace; font-size: 12.5px; color: #374151; background: #F1F3F6; padding: 1px 5px; border-radius: 4px; }
+
+  .chip { font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 5px 12px; border: 1px solid; background: #fff; }
+
+  svg { position: absolute; left: 0; top: 0; pointer-events: none; }
+  .lbl { font-size: 12.5px; font-weight: 600; fill: #374151; }
+
+  .footer { left: 40px; right: 40px; top: 935px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .footer .tech { font-size: 13px; font-weight: 600; color: #374151; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; }
+  .footer .sep { color: var(--muted); font-size: 13px; margin: 0 4px; }
+</style>
+</head>
+<body>
+<div class="abs title">
+  <h1>ShopLite: Docker Swarm → Kubernetes</h1>
+  <p>Phased migration with a shared edge, a weighted cutover, a scripted database move and one monitoring view of both platforms</p>
+</div>
+<div class="abs repo">branch: swarm-migration</div>
+
+<!-- users + edge -->
+<div class="abs card" style="--accent:var(--user); left:620px; top:118px; width:360px; height:62px; padding-top:10px;">
+  <h3>Users</h3><p style="margin-top:2px;"><code>https://shoplite.localhost</code> · one hostname</p>
+</div>
+<div class="abs card" style="--accent:var(--edge); left:560px; top:212px; width:480px; height:96px;">
+  <h3>Traefik edge (shared front door)</h3>
+  <p>TLS from an internal CA · TLS 1.2+ · http→https<br>weighted service: <code>frontend@swarm</code> / <code>frontend-k8s</code> · <code>cutover.sh</code></p>
+</div>
+
+<!-- Swarm zone -->
+<div class="abs zone" style="left:40px; top:350px; width:660px; height:420px; border-color:#9ADCF2; background:rgba(13,183,237,0.04);"></div>
+<div class="abs zone-label" style="left:64px; top:364px; color:#0B8DB8;">Docker Swarm · legacy (source)</div>
+<div class="abs card" style="--accent:var(--swarm); left:64px; top:400px; width:300px; height:112px;">
+  <h3>frontend · orders · users</h3>
+  <p>stack <code>shoplite</code>, 2 replicas each<br>rolling updates, auto-rollback<br>overlay network <code>shoplite-net</code></p>
+</div>
+<div class="abs card" style="--accent:var(--db); left:64px; top:532px; width:300px; height:100px;">
+  <h3>Postgres + volume <code>pgdata</code></h3>
+  <p>pinned to its node · after the move:<br><b>read-only</b>, kept as fallback</p>
+</div>
+<div class="abs card" style="--accent:var(--swarm); left:64px; top:652px; width:300px; height:96px;">
+  <h3>Swarm secrets &amp; configs</h3>
+  <p><code>/run/secrets/db_password</code><br>immutable → versioned names for rotation</p>
+</div>
+<div class="abs card" style="--accent:var(--ans); left:384px; top:400px; width:296px; height:132px;">
+  <h3>Ansible</h3>
+  <p>rebuilds the Swarm platform:<br>swarm init, registry, Vault secrets,<br>certs, stack deploy · idempotent</p>
+</div>
+<div class="abs card" style="--accent:var(--reg); left:384px; top:652px; width:296px; height:96px;">
+  <h3>Private registry <code>:5050</code></h3>
+  <p>same image names for both platforms<br>immutable tags <code>version-commit</code></p>
+</div>
+
+<!-- middle column -->
+<div class="abs card" style="--accent:var(--edge); left:720px; top:400px; width:160px; height:112px; padding-left:16px;">
+  <h3 style="font-size:15px;">L4 forwarder</h3>
+  <p style="font-size:12.5px;"><code>:8090</code> → NodePort<br>stand-in for<br>MetalLB / HAProxy</p>
+</div>
+<div class="abs" style="left:716px; top:596px; width:170px; font-size:12.5px; color:#374151; text-align:center; line-height:1.35;">
+  <b style="color:var(--db);">Phase 3 · database</b><br>read-only freeze →<br>pg_dump / restore →<br>checksum → switch
+</div>
+
+<!-- Kubernetes zone -->
+<div class="abs zone" style="left:900px; top:350px; width:660px; height:420px; border-color:#9DB5E8; background:rgba(50,108,229,0.04);"></div>
+<div class="abs zone-label" style="left:924px; top:364px; color:var(--k8s);">Kubernetes (kind) · target</div>
+<div class="abs" style="left:920px; top:392px; width:620px; height:224px; border:1px solid #CFE0F7; border-radius:12px; background:#fff;"></div>
+<div class="abs" style="left:938px; top:402px; font-size:13px; font-weight:600; color:var(--muted);">namespace: <span style="font-family:'SF Mono',Menlo,monospace; color:var(--ink);">shop</span> · shared Helm chart (golden path)</div>
+<div class="abs card" style="--accent:var(--app); left:936px; top:428px; width:588px; height:92px;">
+  <h3>frontend · orders · users</h3>
+  <p>probes <code>/ready</code> + <code>/health</code> · Secret at <code>/run/secrets</code> (no app change)<br>no ServiceAccount token · non-root · read-only FS · <code>/metrics</code></p>
+</div>
+<div class="abs card" style="--accent:var(--db); left:936px; top:532px; width:588px; height:70px;">
+  <h3>Postgres StatefulSet + PVC</h3>
+  <p>apps use Service <code>postgres</code>: ExternalName (Swarm) → ClusterIP (here)</p>
+</div>
+<div class="abs" style="left:920px; top:628px; width:620px; height:128px; border:1px solid #F3C9BD; border-radius:12px; background:#fff;"></div>
+<div class="abs" style="left:938px; top:636px; font-size:13px; font-weight:600; color:var(--muted);">namespace: <span style="font-family:'SF Mono',Menlo,monospace; color:var(--ink);">monitoring</span> · kube-prometheus-stack</div>
+<div class="abs card" style="--accent:var(--mon); left:936px; top:662px; width:184px; height:80px; padding-left:16px;">
+  <h3 style="font-size:15px;">Prometheus</h3><p style="font-size:12.5px;">scrapes both platforms<br>alert rules as code</p>
+</div>
+<div class="abs card" style="--accent:var(--mon); left:1138px; top:662px; width:184px; height:80px; padding-left:16px;">
+  <h3 style="font-size:15px;">Alertmanager</h3><p style="font-size:12.5px;">groups, routes,<br>silences alerts</p>
+</div>
+<div class="abs card" style="--accent:var(--mon); left:1340px; top:662px; width:184px; height:80px; padding-left:16px;">
+  <h3 style="font-size:15px;">Grafana</h3><p style="font-size:12.5px;">migration dashboard<br>Swarm vs K8s</p>
+</div>
+
+<!-- Jenkins -->
+<div class="abs card" style="--accent:var(--jen); left:900px; top:800px; width:660px; height:84px;">
+  <h3>Jenkins (JCasC + Job DSL + Jenkinsfile)</h3>
+  <p>build → push → <code>helm lint</code> → <code>helm upgrade --atomic</code> → smoke test · tag guard</p>
+</div>
+
+<!-- phases -->
+<div class="abs" style="left:40px; top:800px; width:660px; height:84px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px;">
+  <div style="font-size:13px; font-weight:700; letter-spacing:0.8px; text-transform:uppercase; color:var(--muted);">Migration phases</div>
+  <div style="display:flex; gap:6px; margin-top:10px; flex-wrap:nowrap; font-size:11.5px;">
+    <span class="chip" style="font-size:11.5px; padding:4px 9px; color:#374151; border-color:var(--line);">0 Prepare</span>
+    <span class="chip" style="font-size:11.5px; padding:4px 9px; color:var(--app); border-color:#BFE6D7;">1 Stateless (DB on Swarm)</span>
+    <span class="chip" style="font-size:11.5px; padding:4px 9px; color:#0B8DB8; border-color:#9ADCF2;">2 Cutover 10→50→100%</span>
+    <span class="chip" style="font-size:11.5px; padding:4px 9px; color:var(--db); border-color:#B9C9DB;">3 Database</span>
+    <span class="chip" style="font-size:11.5px; padding:4px 9px; color:#374151; border-color:var(--line);">4 Decommission</span>
+  </div>
+</div>
+
+<svg width="1600" height="1000">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4B5563"/></marker>
+    <marker id="d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#336791"/></marker>
+    <marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#E6522C"/></marker>
+  </defs>
+  <!-- users -> edge -->
+  <path d="M800,180 L800,210" stroke="#4B5563" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <!-- edge -> swarm (weight 100 -> 0) -->
+  <path d="M640,308 C640,336 380,326 370,348" stroke="#9CA3AF" stroke-width="2" stroke-dasharray="6 5" fill="none" marker-end="url(#a)"/>
+  <text class="lbl" x="380" y="330">weight 100 → 0</text>
+  <!-- edge -> forwarder -> k8s (weight 0 -> 100) -->
+  <path d="M800,308 L800,398" stroke="#4B5563" stroke-width="2.4" fill="none" marker-end="url(#a)"/>
+  <text class="lbl" x="790" y="360" text-anchor="end">weight 0 → 100</text>
+  <path d="M880,460 L934,466" stroke="#4B5563" stroke-width="2.4" fill="none" marker-end="url(#a)"/>
+  <!-- DB migration -->
+  <path d="M364,584 L700,584 C830,584 860,566 934,566" stroke="#336791" stroke-width="2.4" fill="none" marker-end="url(#d)"/>
+  <!-- prometheus scrapes swarm traefik -->
+  <path d="M936,702 L892,702 L892,312" stroke="#E6522C" stroke-width="1.8" stroke-dasharray="5 4" fill="none" marker-end="url(#m)"/>
+  <text class="lbl" x="902" y="332" style="fill:#B4401F;">scraped by Prometheus :8082 (per-platform requests, cert expiry)</text>
+  <!-- jenkins -> k8s -->
+  <path d="M1230,800 L1230,772" stroke="#D24939" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <text class="lbl" x="1240" y="792">deploys ns shop</text>
+  <!-- jenkins -> registry -->
+  <path d="M900,842 C800,842 740,700 684,700" stroke="#7C3AED" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <text class="lbl" x="772" y="778" text-anchor="end" style="fill:#6D28D9;">push image</text>
+</svg>
+
+<div class="abs footer">
+  <span class="tech">Docker Swarm</span><span class="tech">Traefik</span><span class="tech">Ansible + Vault</span>
+  <span class="sep">→</span>
+  <span class="tech">Kubernetes</span><span class="tech">Helm</span><span class="tech">Jenkins</span>
+  <span class="tech">Prometheus</span><span class="tech">Alertmanager</span><span class="tech">Grafana</span><span class="tech">Postgres</span><span class="tech">OpenSSL PKI</span>
+</div>
+</body>
+</html>
