@@ -28,6 +28,12 @@ jobs:
   - script: |
       pipelineJob('shoplite-deploy') {
         description('Build, push and deploy one ShopLite service to Kubernetes')
+        // Also declared here: Job DSL recreates the job on every Jenkins start, which would
+        // drop parameters that the Jenkinsfile only registers after its first run.
+        parameters {
+          choiceParam('SERVICE', ['users-service', 'orders-service', 'frontend'], 'Service to release')
+          stringParam('VERSION', '1.1.1', 'Semantic version, e.g. 1.1.1')
+        }
         definition {
           cpsScm {
             scm {
