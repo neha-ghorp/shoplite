@@ -45,6 +45,10 @@ const pool = process.env.DB_HOST
     })
   : null;
 
+// Idle pooled connections die when the DB restarts. Without this handler Node treats it as an
+// unhandled 'error' event and the whole process crashes; found in the DB-outage drill.
+pool?.on('error', (err) => console.error('idle DB connection lost:', err.message));
+
 async function findUsers() {
   if (!pool) return users;
   const { rows } = await pool.query('SELECT id, name FROM users ORDER BY id');
